@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ポーカー勝率計算（Flask版）</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <style>
+    body {
+      background-color: #000;
+      color: #ddd;
+    }
+
+    h2, h4, strong, p {
+      color: #fff;
+    }
+
+    .card-grid img {
+      width: 80px;
+      margin-right: 2px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.1s;
+    }
+
+    .card-grid img:hover {
+      transform: scale(1.03);
+    }
+
+    .card-grid img.selected {
+      border: 2px solid red;
+    }
+
+    .card-grid .row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .card-grid .suit-label {
+      width: 30px;
+      font-weight: bold;
+      font-size: 18px;
+      color: #fff;
+      display: inline-block;
+    }
+
+    @media (max-width: 768px) {
+      .card-grid img {
+        width: 60px;
+        margin-right: 2px;
+      }
+
+      .card-grid .suit-label {
+        font-size: 16px;
+        width: 24px;
+      }
+
+      h2 {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body class="container py-4">
+  <h2>🃏 ポーカー勝率計算アプリ（Flask版）</h2>
+  <p>カードを順に選択してください（自分2枚 → 相手2枚 → ボード最大5枚）</p>
+
+  <div class="mb-3">
+    <strong>選択中：</strong><br>
+    <div><strong>あなた：</strong> <span id="my-cards"></span></div>
+    <div><strong>相手：</strong> <span id="opp-cards"></span></div>
+    <div><strong>ボード：</strong> <span id="board-cards"></span></div>
+  </div>
+
+  <div class="card-grid mb-4" id="card-grid">
+    <!-- カード画像はJSで挿入 -->
+  </div>
+
+  <div class="mb-4">
+    <button class="btn btn-primary me-2" onclick="calculate()">📊 勝率を計算</button>
+    <button class="btn btn-secondary" onclick="reset()">🔄 リセット</button>
+  </div>
+
+  <h4 id="result"></h4>
+
+  <script>
+    const suits = ['s', 'h', 'd', 'c'];
+    const suitLabels = {s: '♠', h: '♥', d: '♦', c: '♣'};
+    const ranks = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+
+    const selected = [];
+    const myCards = [];
+    const oppCards = [];
+    const boardCards = [];
+
+    function createCardGrid() {
+      const grid = document.getElementById('card-grid');
+      grid.innerHTML = '';
+      suits.forEach(suit => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'row';
+
+        const label = document.createElement('span');
+        label.className = 'suit-label';
+        label.textContent = suitLabels[suit];
+        rowDiv.appendChild(label);
+
+        ranks.forEach(rank => {
+          const card = rank + suit;
+          const img = document.createElement('img');
+          img.src = `/static/cards/${card}.png`;
+          img.alt = card;
+          img.onclick = () => selectCard(card, img);
+          rowDiv.appendChild(img);
+        });
+
+        grid.appendChild(rowDiv);
+      });
+    }
+
+     function selectCard(card, img) {
+        const cardIndex = selected.indexOf(card);
+
+         if (cardIndex !== -1) {
+         // すでに選択済み → 取り消し処理
+         selected.splice(cardIndex, 1);
+         img.classList.remove('selected');
+
+         // どのリストにあるか確認して削除
+         [myCards, oppCards, boardCards].forEach(list => {
+           const idx = list.indexOf(card);
+           if (idx !== -1) list.splice(idx, 1);
+         });
+
+         } else {
+          // 未選択 → 通常の追加処理
+          if (selected.length >= 9) return;
+
+          selected.push(card);
+          img.classList.add('selected');
+
+           if (myCards.length < 2) {
+            myCards.push(card);
+         } else if (oppCards.length < 2) {
+            oppCards.push(card);
+          } else if (boardCards.length < 5) {
+            boardCards.push(card);
+         }
+     }
+
+  updateDisplay();
+}
+
+
+    function updateDisplay() {
+      document.getElementById("my-cards").innerText = myCards.join(", ");
+      document.getElementById("opp-cards").innerText = oppCards.join(", ");
+      document.getElementById("board-cards").innerText = boardCards.join(", ");
+    }
+
+    function reset() {
+      selected.length = 0;
+      myCards.length = 0;
+      oppCards.length = 0;
+      boardCards.length = 0;
+      document.querySelectorAll("img").forEach(img => img.classList.remove("selected"));
+      updateDisplay();
+      document.getElementById("result").innerText = "";
+    }
+
+    async function calculate() {
+      if (myCards.length !== 2 || oppCards.length !== 2) {
+        alert("自分と相手の手札を2枚ずつ選んでください。");
+        return;
+      }
+
+      const response = await fetch("/calculate", {
+        method: "POST",
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          my_cards: myCards,
+          opp_cards: oppCards,
+          board_cards: boardCards
+        })
+      });
+
+      const data = await response.json();
+      document.getElementById("result").innerText = `✅ あなたの勝率：${data.winrate}%`;
+    }
+
+    // 初期表示
+    createCardGrid();
+  </script>
+</body>
+</html>
